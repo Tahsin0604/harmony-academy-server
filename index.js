@@ -91,6 +91,7 @@ async function run() {
           {
             $sort: {
               totalStudents: -1,
+              name: 1,
             },
           },
           {
@@ -102,6 +103,14 @@ async function run() {
         ])
         .toArray();
       res.send(instructors);
+    });
+
+    app.get("/instructors-count", async (req, res) => {
+      const result = await usersCollections.countDocuments({
+        role: "Instructor",
+      });
+      console.log(result);
+      res.send({ totalInstructors: result });
     });
     /**/
 
@@ -119,6 +128,14 @@ async function run() {
         ])
         .toArray();
       res.send(result);
+    });
+
+    app.get("/classes-count", async (req, res) => {
+      const result = await classesCollections.countDocuments({
+        status: "approved",
+      });
+      console.log(result);
+      res.send({ totalClasses: result });
     });
     /* */
 
