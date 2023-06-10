@@ -34,12 +34,19 @@ async function run() {
       .db("harmonyAcademyDB")
       .collection("reviews");
     const usersCollections = client.db("harmonyAcademyDB").collection("users");
+    const classesCollections = client
+      .db("harmonyAcademyDB")
+      .collection("classes");
 
     /**/
 
     /*Api Portions*/
+
     /* Instructors api */
     app.get("/instructors", async (req, res) => {
+      const page = parseInt(req.query.page) || 0;
+      const limit = parseInt(req.query.limit) || 6;
+      const skip = page * limit;
       const instructors = await usersCollections
         .aggregate([
           { $match: { role: "Instructor" } },
@@ -52,24 +59,69 @@ async function run() {
             },
           },
           {
+            $unwind: "$classes",
+          },
+          {
+            $match: { "classes.status": "approved" },
+          },
+          {
+            $group: {
+              _id: "$_id",
+              image: { $first: "$image" },
+              name: { $first: "$name" },
+              email: { $first: "$email" },
+              gender: { $first: "$gender" },
+              totalClasses: { $sum: 1 },
+              totalStudents: { $sum: "$classes.EnrolledStudents" },
+              classes: { $push: "$classes" },
+            },
+          },
+          {
             $project: {
               _id: 1,
               image: 1,
               name: 1,
               email: 1,
               gender: 1,
-              activeClasses: 1,
-              totalClasses: { $size: "$classes" },
-              totalStudents: { $sum: "$classes.EnrolledStudents" },
+              totalClasses: 1,
+              totalStudents: 1,
+              classes: 1,
             },
+          },
+          {
+            $sort: {
+              totalStudents: -1,
+            },
+          },
+          {
+            $skip: skip,
+          },
+          {
+            $limit: limit,
           },
         ])
         .toArray();
-      // const result= await
       res.send(instructors);
     });
-
     /**/
+
+    /* Classes Api */
+    app.get("/classes", async (req, res) => {
+      const page = parseInt(req.query.page) || 0;
+      const limit = parseInt(req.query.limit) || 6;
+      const skip = page * limit;
+      const result = await classesCollections
+        .aggregate([
+          { $match: { status: "approved" } },
+          { $sort: { EnrolledStudents: -1 } },
+          { $skip: skip },
+          { $limit: limit },
+        ])
+        .toArray();
+      res.send(result);
+    });
+    /* */
+
     /*Reviews api */
     app.get("/reviews", async (req, res) => {
       const result = await reviewsCollections.find().toArray();
