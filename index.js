@@ -13,7 +13,7 @@ app.use(cors());
 
 /* MongoDB */
 
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.USER_DB}:${process.env.PASS_DB}@cluster0.hrqu461.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -104,12 +104,63 @@ async function run() {
         .toArray();
       res.send(instructors);
     });
+    app.get("/instructors/:id", async (req, res) => {
+      const id = req.params.id;
+      const instructors = await usersCollections
+        .aggregate([
+          { $match: { role: "Instructor" } },
+          {
+            $lookup: {
+              from: "classes",
+              localField: "email",
+              foreignField: "instructorEmail",
+              as: "classes",
+            },
+          },
+          {
+            $unwind: "$classes",
+          },
+          {
+            $match: { "classes.status": "approved" },
+          },
+          {
+            $group: {
+              _id: "$_id",
+              image: { $first: "$image" },
+              name: { $first: "$name" },
+              email: { $first: "$email" },
+              gender: { $first: "$gender" },
+              totalClasses: { $sum: 1 },
+              totalStudents: { $sum: "$classes.EnrolledStudents" },
+              classes: { $push: "$classes" },
+            },
+          },
+          {
+            $project: {
+              _id: 1,
+              image: 1,
+              name: 1,
+              email: 1,
+              gender: 1,
+              totalClasses: 1,
+              totalStudents: 1,
+              classes: 1,
+            },
+          },
+          {
+            $match: {
+              _id: new ObjectId(id),
+            },
+          },
+        ])
+        .toArray();
+      res.send(instructors);
+    });
 
     app.get("/instructors-count", async (req, res) => {
       const result = await usersCollections.countDocuments({
         role: "Instructor",
       });
-      console.log(result);
       res.send({ totalInstructors: result });
     });
     /**/
@@ -134,7 +185,6 @@ async function run() {
       const result = await classesCollections.countDocuments({
         status: "approved",
       });
-      console.log(result);
       res.send({ totalClasses: result });
     });
     /* */
