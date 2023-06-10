@@ -2,6 +2,7 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
+const jwt = require("jsonwebtoken");
 
 //
 const app = express();
@@ -10,6 +11,25 @@ const port = process.env.PORT || 5000;
 // middleware
 app.use(express.json());
 app.use(cors());
+// jwt middleware
+const verifyJwt = (req, res, next) => {
+  const authorization = req.headers.authorization;
+  if (!authorization) {
+    return res
+      .status(401)
+      .send({ error: true, message: "Unauthorized Access" });
+  }
+  const token = authorization.split(" ")[1];
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res
+        .status(401)
+        .send({ error: true, message: "Unauthorized Access" });
+    }
+    req.decoded = decoded;
+    next();
+  });
+};
 
 /* MongoDB */
 
@@ -42,6 +62,26 @@ async function run() {
 
     /*Api Portions*/
 
+    /*Jwt api */
+    app.post("/jwt", (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.JWT_SECRET, {
+        expiresIn: "1h",
+      });
+      res.send(token);
+    });
+
+    /* Users or Students Api */
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      const query = { email: user.email };
+      // const existingUser = await usersCollections.findOne(query);
+      // if (existingUser) {
+      //   return res.send({ message: "User Already exists" });
+      // }
+      const result = await usersCollections.insertOne(user);
+      res.send(result);
+    });
     /* Instructors api */
     app.get("/instructors", async (req, res) => {
       const page = parseInt(req.query.page) || 0;
