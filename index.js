@@ -20,6 +20,7 @@ const verifyJwt = (req, res, next) => {
       .send({ error: true, message: "Unauthorized Access" });
   }
   const token = authorization.split(" ")[1];
+  console.log(token);
   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
     if (err) {
       return res
@@ -27,6 +28,7 @@ const verifyJwt = (req, res, next) => {
         .send({ error: true, message: "Unauthorized Access" });
     }
     req.decoded = decoded;
+    console.log(req.decoded);
     next();
   });
 };
@@ -57,6 +59,9 @@ async function run() {
     const classesCollections = client
       .db("harmonyAcademyDB")
       .collection("classes");
+    const selectedClassesCollections = client
+      .db("harmonyAcademyDB")
+      .collection("selectedClasses");
 
     /**/
 
@@ -75,13 +80,26 @@ async function run() {
     app.post("/users", async (req, res) => {
       const user = req.body;
       const query = { email: user.email };
-      // const existingUser = await usersCollections.findOne(query);
-      // if (existingUser) {
-      //   return res.send({ message: "User Already exists" });
-      // }
+      const existingUser = await usersCollections.findOne(query);
+      if (existingUser) {
+        return res.send({ message: "User Already exists" });
+      }
+      console.log(user);
       const result = await usersCollections.insertOne(user);
       res.send(result);
     });
+    app.get("/users/role/:email", verifyJwt, async (req, res) => {
+      const email = req.params.email;
+      if (req.decoded.email !== email) {
+        return res.send({ role: false });
+      }
+      const query = { email: email };
+      const user = await usersCollections.findOne(query);
+      const role = { role: user?.role };
+      console.log(role);
+      res.send(role);
+    });
+    /* */
     /* Instructors api */
     app.get("/instructors", async (req, res) => {
       const page = parseInt(req.query.page) || 0;
@@ -226,6 +244,11 @@ async function run() {
         status: "approved",
       });
       res.send({ totalClasses: result });
+    });
+    app.post("/selectedClasses", async (req, res) => {
+      const selectedClass = req.body;
+      const result = await selectedClassesCollections.insertOne(selectedClass);
+      res.send(result);
     });
     /* */
 
