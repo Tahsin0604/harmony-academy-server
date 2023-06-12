@@ -282,8 +282,13 @@ async function run() {
         .toArray();
       res.send(result);
     });
-    app.post("/selectedClasses", async (req, res) => {
+    app.post("/selectedClasses", verifyJwt, async (req, res) => {
       const selectedClass = req.body;
+      if (req.decoded.email !== email) {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden Access" });
+      }
       const result = await selectedClassesCollections.insertOne(selectedClass);
       res.send(result);
     });
@@ -304,6 +309,28 @@ async function run() {
           .send({ error: true, message: "Forbidden Access" });
       }
       const result = await enrolledClassesCollections.find(email).toArray();
+      res.send(result);
+    });
+    // api only for instructor
+    app.get("/my-classes", verifyJwt, verifyInstructor, async (req, res) => {
+      const email = req.params.email;
+      if (req.decoded.email !== email) {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden Access" });
+      }
+      const result = await classesCollections.find({ email: email }).toArray();
+      res.send(result);
+    });
+    //api only for admin
+    app.get("/allclasses", verifyJwt, verifyAdmin, async (req, res) => {
+      const email = req.params.email;
+      if (req.decoded.email !== email) {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden Access" });
+      }
+      const result = await classesCollections.find({ email: email }).toArray();
       res.send(result);
     });
     /* */
