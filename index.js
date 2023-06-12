@@ -20,7 +20,6 @@ const verifyJwt = (req, res, next) => {
       .send({ error: true, message: "Unauthorized Access" });
   }
   const token = authorization.split(" ")[1];
-  console.log(token);
   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
     if (err) {
       return res
@@ -28,7 +27,6 @@ const verifyJwt = (req, res, next) => {
         .send({ error: true, message: "Unauthorized Access" });
     }
     req.decoded = decoded;
-    console.log(req.decoded);
     next();
   });
 };
@@ -62,8 +60,33 @@ async function run() {
     const selectedClassesCollections = client
       .db("harmonyAcademyDB")
       .collection("selectedClasses");
-
+    const enrolledClassesCollections = client
+      .db("harmonyAcademyDB")
+      .collection("enrolledClasses");
     /**/
+
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await usersCollections.findOne(query);
+      if (user?.role !== "admin") {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden Access" });
+      }
+      next();
+    };
+    const verifyInstructor = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await usersCollections.findOne(query);
+      if (user?.role !== "instructor") {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden Access" });
+      }
+      next();
+    };
 
     /*Api Portions*/
 
@@ -75,6 +98,7 @@ async function run() {
       });
       res.send(token);
     });
+    /**/
 
     /* Users or Students Api */
     app.post("/users", async (req, res) => {
@@ -96,10 +120,10 @@ async function run() {
       const query = { email: email };
       const user = await usersCollections.findOne(query);
       const role = { role: user?.role };
-      console.log(role);
       res.send(role);
     });
     /* */
+
     /* Instructors api */
     app.get("/instructors", async (req, res) => {
       const page = parseInt(req.query.page) || 0;
@@ -214,7 +238,6 @@ async function run() {
         .toArray();
       res.send(instructors);
     });
-
     app.get("/instructors-count", async (req, res) => {
       const result = await usersCollections.countDocuments({
         role: "Instructor",
@@ -244,6 +267,11 @@ async function run() {
         status: "approved",
       });
       res.send({ totalClasses: result });
+    });
+    app.get("/selectedClasses/:email", verifyJwt, async (req, res) => {
+      const email = req.params.email;
+      const result = await selectedClassesCollections.findOne(email);
+      res.send(result);
     });
     app.post("/selectedClasses", async (req, res) => {
       const selectedClass = req.body;
