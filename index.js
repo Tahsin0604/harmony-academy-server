@@ -131,7 +131,7 @@ async function run() {
       const skip = page * limit;
       const instructors = await usersCollections
         .aggregate([
-          { $match: { role: "Instructor" } },
+          { $match: { role: "instructor" } },
           {
             $lookup: {
               from: "classes",
@@ -261,16 +261,25 @@ async function run() {
         .toArray();
       res.send(result);
     });
-
     app.get("/classes-count", async (req, res) => {
       const result = await classesCollections.countDocuments({
         status: "approved",
       });
       res.send({ totalClasses: result });
     });
-    app.get("/selectedClasses/:email", verifyJwt, async (req, res) => {
-      const email = req.params.email;
-      const result = await selectedClassesCollections.findOne(email);
+    app.get("/selectedClasses", verifyJwt, async (req, res) => {
+      const email = req.query.email;
+      if (!email) {
+        return res.send([]);
+      }
+      if (req.decoded.email !== email) {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden Access" });
+      }
+      const result = await selectedClassesCollections
+        .find({ email: email })
+        .toArray();
       res.send(result);
     });
     app.post("/selectedClasses", async (req, res) => {
@@ -278,8 +287,33 @@ async function run() {
       const result = await selectedClassesCollections.insertOne(selectedClass);
       res.send(result);
     });
+    app.delete("/selectedClasses/:id", verifyJwt, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await selectedClassesCollections.deleteOne(query);
+      res.send(result);
+    });
+    app.get("/enrolledClasses", verifyJwt, async (req, res) => {
+      const email = req.query.email;
+      if (!email) {
+        return res.send([]);
+      }
+      if (req.decoded.email !== email) {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden Access" });
+      }
+      const result = await enrolledClassesCollections.find(email).toArray();
+      res.send(result);
+    });
     /* */
 
+    /* Payment Api */
+    app.post("/payment", verifyJwt, async (req, res) => {
+      const body = req.params.body;
+      console.log(body);
+    });
+    /* */
     /*Reviews api */
     app.get("/reviews", async (req, res) => {
       const result = await reviewsCollections.find().toArray();
