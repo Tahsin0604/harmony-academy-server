@@ -101,6 +101,16 @@ async function run() {
     /**/
 
     /* Users or Students Api */
+    app.get("/users/:email", verifyJwt, async (req, res) => {
+      const email = req.params.email;
+      if (req.decoded.email !== email) {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden Access" });
+      }
+      const result = await usersCollections.findOne({ email: email });
+      res.send(result);
+    });
     app.post("/users", async (req, res) => {
       const user = req.body;
       const query = { email: user.email };
@@ -121,54 +131,21 @@ async function run() {
       const role = { role: user?.role };
       res.send(role);
     });
-    //for instructor
-    app.get(
-      "/enrolled-users/:email",
-      verifyJwt,
-      verifyInstructor,
-      async (req, res) => {
-        const email = req.params.email;
-        if (req.decoded.email !== email) {
-          return res
-            .status(403)
-            .send({ error: true, message: "Forbidden Access" });
-        }
-        const result = await classesCollections
-          .aggregate([
-            {
-              $match: { instructorEmail: email },
-            },
-            {
-              $lookup: {
-                from: enrolledClasses,
-                localField: _id,
-                foreignField: classId,
-                as: enrollments,
-              },
-            },
-            {
-              $lookup: {
-                from: users,
-                localField: studentEmail,
-                foreignField: email,
-                as: users,
-              },
-            },
-            {
-              $project: {
-                _id: 1,
-                className: 1,
-                users: 1,
-              },
-            },
-          ])
-          .toArray();
-        res.send(result);
-      }
-    );
     //for admin
     app.get("/all-users", verifyJwt, verifyAdmin, async (req, res) => {
       const result = await usersCollections.find().toArray();
+      res.send(result);
+    });
+    app.patch("/user-role/:id", verifyJwt, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const body = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          role: body.role,
+        },
+      };
+      const result = await usersCollections.updateOne(query, updatedDoc);
       res.send(result);
     });
     /* */
@@ -289,7 +266,7 @@ async function run() {
     });
     app.get("/instructors-count", async (req, res) => {
       const result = await usersCollections.countDocuments({
-        role: "Instructor",
+        role: "instructor",
       });
       res.send({ totalInstructors: result });
     });
@@ -315,14 +292,12 @@ async function run() {
       const body = req.body;
       const query = { _id: new ObjectId(id) };
       const result = await classesCollections.replaceOne(query, body);
-      console.log(result);
       res.send(result);
     });
     app.get("/classes/:id", verifyJwt, verifyInstructor, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await classesCollections.findOne(query);
-      console.log(result);
       res.send(result);
     });
     app.post("/classes", verifyJwt, verifyInstructor, async (req, res) => {
@@ -451,7 +426,171 @@ async function run() {
       const result = await classesCollections.find().toArray();
       res.send(result);
     });
+    app.patch(
+      "/class-feedback/:id",
+      verifyJwt,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const body = req.body;
+        const query = { _id: new ObjectId(id) };
+        const updatedDoc = {
+          $set: {
+            feedback: body.feedback,
+          },
+        };
+        const result = await classesCollections.updateOne(query, updatedDoc);
+        res.send(result);
+      }
+    );
+    app.patch("/class-status/:id", verifyJwt, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const body = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          status: body.status,
+        },
+      };
+      const result = await classesCollections.updateOne(query, updatedDoc);
+
+      res.send(result);
+    });
     /* */
+
+    /*statistics*/
+    //for student
+    app.get("/student-statistics", verifyJwt, async (req, res) => {
+      const email = req.query.email;
+      if (req.decoded.email !== email) {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden Access" });
+      }
+      const selectedClassResult =
+        await selectedClassesCollections.countDocuments({
+          studentEmail: email,
+        });
+      const enrolledClassResult =
+        await enrolledClassesCollections.countDocuments({
+          studentEmail: email,
+        });
+      res.send({
+        selectedClasses: selectedClassResult,
+        enrolledClasses: enrolledClassResult,
+      });
+    });
+    app.get(
+      "/instructor-statistics",
+      verifyJwt,
+      verifyInstructor,
+      async (req, res) => {
+        const email = req.query.email;
+        if (req.decoded.email !== email) {
+          return res
+            .status(403)
+            .send({ error: true, message: "Forbidden Access" });
+        }
+        const totalClasses = await classesCollections.countDocuments({
+          instructorEmail: email,
+        });
+        const totalApprovedClasses = await classesCollections.countDocuments({
+          $and: [{ instructorEmail: email }, { status: "approved" }],
+        });
+        const totalDeniedClasses = await classesCollections.countDocuments({
+          $and: [{ instructorEmail: email }, { status: "denied" }],
+        });
+        const totalPendingClasses = await classesCollections.countDocuments({
+          $and: [{ instructorEmail: email }, { status: "pending" }],
+        });
+        const totalEnrolledStudent = await classesCollections
+          .aggregate([
+            {
+              $match: {
+                status: "approved",
+              },
+            },
+            {
+              $match: {
+                instructorEmail: email,
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                totalEnrolledStudents: { $sum: "$EnrolledStudents" },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                totalEnrolledStudents: 1,
+              },
+            },
+          ])
+          .toArray();
+
+        res.send({
+          totalClasses: totalClasses,
+          totalApprovedClasses: totalApprovedClasses,
+          totalDeniedClasses: totalDeniedClasses,
+          totalPendingClasses: totalPendingClasses,
+          totalEnrolledStudent: totalEnrolledStudent[0].totalEnrolledStudents,
+        });
+      }
+    );
+    app.get("/admin-statistics", verifyJwt, verifyAdmin, async (req, res) => {
+      const email = req.query.email;
+      if (req.decoded.email !== email) {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden Access" });
+      }
+      const totalClasses = await classesCollections.countDocuments();
+      const totalApprovedClasses = await classesCollections.countDocuments({
+        status: "approved",
+      });
+      const totalDeniedClasses = await classesCollections.countDocuments({
+        status: "denied",
+      });
+      const totalPendingClasses = await classesCollections.countDocuments({
+        status: "pending",
+      });
+      const totalEnrolledStudent = await classesCollections
+        .aggregate([
+          {
+            $match: {
+              status: "approved",
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              totalEnrolledStudents: { $sum: "$EnrolledStudents" },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              totalEnrolledStudents: 1,
+            },
+          },
+        ])
+        .toArray();
+
+      const totalInstructor = await usersCollections.countDocuments({
+        role: "instructor",
+      });
+      res.send({
+        totalClasses: totalClasses,
+        totalApprovedClasses: totalApprovedClasses,
+        totalDeniedClasses: totalDeniedClasses,
+        totalPendingClasses: totalPendingClasses,
+        totalEnrolledStudent: totalEnrolledStudent[0].totalEnrolledStudents,
+        totalInstructor: totalInstructor,
+      });
+    });
+    /**/
 
     /* Payment Api */
     app.post("/create-payment-intent", verifyJwt, async (req, res) => {
