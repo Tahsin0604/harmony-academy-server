@@ -48,7 +48,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     /*collections */
     const reviewsCollections = client
       .db("harmonyAcademyDB")
@@ -313,9 +313,6 @@ async function run() {
     });
     app.get("/selectedClasses", verifyJwt, async (req, res) => {
       const email = req.query.email;
-      if (!email) {
-        return res.send([]);
-      }
       if (req.decoded.email !== email) {
         return res
           .status(403)
