@@ -155,6 +155,7 @@ async function run() {
       const page = parseInt(req.query.page) || 0;
       const limit = parseInt(req.query.limit) || 6;
       const skip = page * limit;
+
       const instructors = await usersCollections
         .aggregate([
           { $match: { role: "instructor" } },
@@ -167,10 +168,24 @@ async function run() {
             },
           },
           {
-            $unwind: "$classes",
+            $addFields: {
+              classes: {
+                $cond: [
+                  { $eq: [{ $size: "$classes" }, 0] },
+                  { onProcessing: true },
+                  {
+                    $cond: [
+                      { $eq: [{ $size: "$classes.status" }, 0] },
+                      { onProcessing: true },
+                      "$classes",
+                    ],
+                  },
+                ],
+              },
+            },
           },
           {
-            $match: { "classes.status": "approved" },
+            $unwind: "$classes",
           },
           {
             $group: {
@@ -179,9 +194,55 @@ async function run() {
               name: { $first: "$name" },
               email: { $first: "$email" },
               gender: { $first: "$gender" },
-              totalClasses: { $sum: 1 },
-              totalStudents: { $sum: "$classes.EnrolledStudents" },
-              classes: { $push: "$classes" },
+              totalClasses: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        // { $eq: [{ $ifNull: ["$classes", null] }, null] },
+                        {
+                          $eq: [
+                            { $ifNull: ["$classes.status", null] },
+                            "approved",
+                          ],
+                        },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+              totalStudents: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        // { $eq: [{ $ifNull: ["$classes", null] }, null] },
+                        {
+                          $eq: [
+                            { $ifNull: ["$classes.status", null] },
+                            "approved",
+                          ],
+                        },
+                      ],
+                    },
+                    "$classes.EnrolledStudents",
+                    0,
+                  ],
+                },
+              },
+              classes: {
+                $push: {
+                  $cond: [
+                    {
+                      $eq: [{ $ifNull: ["$classes.status", null] }, "approved"],
+                    },
+                    "$classes",
+                    null,
+                  ],
+                },
+              },
             },
           },
           {
@@ -193,24 +254,19 @@ async function run() {
               gender: 1,
               totalClasses: 1,
               totalStudents: 1,
-              classes: 1,
+              classes: {
+                $filter: {
+                  input: "$classes",
+                  as: "class",
+                  cond: { $ne: ["$$class", null] },
+                },
+              },
             },
           },
           {
             $sort: {
               totalStudents: -1,
               name: 1,
-            },
-          },
-          {
-            $addFields: {
-              totalClasses: {
-                $cond: [
-                  { $eq: [{ $size: "$classes" }, 0] },
-                  0,
-                  "$totalClasses",
-                ],
-              },
             },
           },
           {
@@ -221,6 +277,7 @@ async function run() {
           },
         ])
         .toArray();
+
       res.send(instructors);
     });
     app.get("/instructors/:id", async (req, res) => {
@@ -237,10 +294,24 @@ async function run() {
             },
           },
           {
-            $unwind: "$classes",
+            $addFields: {
+              classes: {
+                $cond: [
+                  { $eq: [{ $size: "$classes" }, 0] },
+                  { onProcessing: true },
+                  {
+                    $cond: [
+                      { $eq: [{ $size: "$classes.status" }, 0] },
+                      { onProcessing: true },
+                      "$classes",
+                    ],
+                  },
+                ],
+              },
+            },
           },
           {
-            $match: { "classes.status": "approved" },
+            $unwind: "$classes",
           },
           {
             $group: {
@@ -249,9 +320,55 @@ async function run() {
               name: { $first: "$name" },
               email: { $first: "$email" },
               gender: { $first: "$gender" },
-              totalClasses: { $sum: 1 },
-              totalStudents: { $sum: "$classes.EnrolledStudents" },
-              classes: { $push: "$classes" },
+              totalClasses: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        // { $eq: [{ $ifNull: ["$classes", null] }, null] },
+                        {
+                          $eq: [
+                            { $ifNull: ["$classes.status", null] },
+                            "approved",
+                          ],
+                        },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+              totalStudents: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        // { $eq: [{ $ifNull: ["$classes", null] }, null] },
+                        {
+                          $eq: [
+                            { $ifNull: ["$classes.status", null] },
+                            "approved",
+                          ],
+                        },
+                      ],
+                    },
+                    "$classes.EnrolledStudents",
+                    0,
+                  ],
+                },
+              },
+              classes: {
+                $push: {
+                  $cond: [
+                    {
+                      $eq: [{ $ifNull: ["$classes.status", null] }, "approved"],
+                    },
+                    "$classes",
+                    null,
+                  ],
+                },
+              },
             },
           },
           {
@@ -263,7 +380,13 @@ async function run() {
               gender: 1,
               totalClasses: 1,
               totalStudents: 1,
-              classes: 1,
+              classes: {
+                $filter: {
+                  input: "$classes",
+                  as: "class",
+                  cond: { $ne: ["$$class", null] },
+                },
+              },
             },
           },
           {
