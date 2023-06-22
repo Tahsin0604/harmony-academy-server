@@ -203,6 +203,17 @@ async function run() {
             },
           },
           {
+            $addFields: {
+              totalClasses: {
+                $cond: [
+                  { $eq: [{ $size: "$classes" }, 0] },
+                  0,
+                  "$totalClasses",
+                ],
+              },
+            },
+          },
+          {
             $skip: skip,
           },
           {
